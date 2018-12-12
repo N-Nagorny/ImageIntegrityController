@@ -26,14 +26,15 @@ private slots:
     void printCom();
 private:
     Ui::MainWindow *ui;
-    Mat   imagerd; //declare imagerd as IplImage
+    Mat   imagerd;
+    Mat origImage;
     QString     FileOpName; //declare FileOpName as IplImage
     bool wmark[64] = {1,0,0,1,1,0,1,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,1,0,1,1,0,1,1,0,1,1,0,1,0,1,1,0,0,1,0,1,1,0,0,1,0};
 
     void KochEmbedder(unsigned int seg_side, unsigned int P);
     void KochExtractor(unsigned int seg_side, unsigned int T);
     bool** calculateHashes(unsigned int seg_side);
-
+    void showImage(Mat image);
 
 };
 

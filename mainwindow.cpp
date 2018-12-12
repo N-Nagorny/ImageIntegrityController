@@ -51,16 +51,9 @@ void MainWindow::openImage()
     //function to load the image whenever fName is not empty
     if( FileOpName.size() )
     {
-        imagerd = imread(FileOpName.toStdString().c_str());
+        origImage = imread(FileOpName.toStdString().c_str());
 
-        Mat rgbImage;
-
-        cvtColor(imagerd, rgbImage, CV_BGR2RGB);
-        QImage image = QImage((const unsigned char*)rgbImage.data, rgbImage.rows, rgbImage.cols, rgbImage.step, QImage::Format_RGB888);
-        QGraphicsScene* scene = new QGraphicsScene();
-        scene->addPixmap(QPixmap::fromImage(image));
-        ui->graphicsView->setScene(scene);
-//        ui->graphicsView->fitInView( scene->sceneRect(), Qt::KeepAspectRatio );
+        showImage(origImage);
     }
 }
 
@@ -87,6 +80,16 @@ void MainWindow::process() {
             KochExtractor(128, ui->spinBox->value());
         }
     }
+}
+
+void MainWindow::showImage(Mat image) {
+    Mat rgb;
+    cvtColor(image, rgb, CV_BGR2RGB);
+
+    QImage qimage = QImage((const unsigned char*)rgb.data, rgb.rows, rgb.cols, rgb.step, QImage::Format_RGB888);
+    QGraphicsScene* scene = new QGraphicsScene();
+    scene->addPixmap(QPixmap::fromImage(qimage));
+    ui->graphicsView->setScene(scene);
 }
 
 bool** MainWindow::calculateHashes(unsigned int seg_side) {
@@ -117,10 +120,10 @@ bool** MainWindow::calculateHashes(unsigned int seg_side) {
                     segments[n].at<double>(i, j) = fgray.at<double>(x + i, y + j);
                 }
             }
-            x = x+ seg_side;
+            x = x + seg_side;
             n = n + 1;
         }
-        y = y+ seg_side;
+        y = y + seg_side;
     }
 
     for (int c = 0; c < Nc; c++) {
@@ -218,6 +221,15 @@ bool** MainWindow::calculateHashes(unsigned int seg_side) {
 
 
 void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
+    int x = seg_side;
+    int y = seg_side;
+    while (x + seg_side <= origImage.cols && y + seg_side <= origImage.rows) {
+        x += seg_side;
+        y += seg_side;
+    }
+    Rect Rec(0, 0, x, y);
+    imagerd = origImage(Rec);
+
     bool** calculatedHashes = calculateHashes(seg_side);
     Mat blue;
     vector<Mat> channels(3);
@@ -231,9 +243,9 @@ void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
 
     int Nc = fimage.cols*fimage.rows / (seg_side*seg_side);
 
-    int y = 0;
+    y = 0;
     int n = 0;
-    int x;
+    x;
     Mat* segments = new Mat[Nc];
     for (int i = 0; i < Nc; i++) {
         segments[i] = Mat(seg_side, seg_side, CV_64F);
@@ -358,13 +370,12 @@ void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
     out.convertTo(tmpImage, CV_8U/*, 255.0*/); // also scale to [0..1] range (not mandatory)
     channels[0] = tmpImage;
     merge(channels, tImage);
-    cvtColor(tImage, cImage, CV_BGR2RGB);
-    QImage image = QImage((const unsigned char*)cImage.data, cImage.rows, cImage.cols, cImage.step, QImage::Format_RGB888);
-    QGraphicsScene* scene = new QGraphicsScene();
-    scene->addPixmap(QPixmap::fromImage(image));
-    ui->graphicsView->setScene(scene);
-//    ui->graphicsView->fitInView( scene->sceneRect(), Qt::KeepAspectRatio );
-    imwrite("outEmb.png", tImage);
+    tImage.copyTo(origImage(Rec));
+    imwrite("outEmb.png", origImage);
+    rectangle(origImage, Rec, Scalar(255), 1, 8, 0);
+
+    showImage(origImage);
+
 }
 
 int hDist(bool* v1, bool* v2, int length) {
@@ -377,6 +388,15 @@ int hDist(bool* v1, bool* v2, int length) {
 }
 
 void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
+    int x = seg_side;
+    int y = seg_side;
+    while (x + seg_side <= origImage.cols && y + seg_side <= origImage.rows) {
+        x += seg_side;
+        y += seg_side;
+    }
+    Rect Rec(0, 0, x, y);
+    imagerd = origImage(Rec);
+    qDebug() << imagerd.cols << ' ' << imagerd.rows;
     bool** calculatedHashes = calculateHashes(seg_side);
     int Nc = imagerd.cols* imagerd.rows / (seg_side*seg_side);
     bool** extractedHashes = new bool*[Nc];
@@ -395,9 +415,9 @@ void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
 //    Mat dctMat;
 //    dct(fimage,dctMat);
 
-    int y = 0;
+    y = 0;
     int n = 0;
-    int x;
+    x;
     Mat* segments = new Mat[Nc];
     for (int i = 0; i < Nc; i++) {
         segments[i] = Mat(seg_side,seg_side,CV_64F);
@@ -463,13 +483,6 @@ void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
             v1 = v1 - 2;
         }
         dct(dctMat,segments[c], DCT_INVERSE);
-//        ofstream myfile("output",ofstream::out);
-//        for (bool i : wmark_e) {
-//            myfile << (int)i;
-
-//        }
-
-//        myfile.close();
     }
 
     std::set<int> modifiedSegs;
@@ -523,13 +536,10 @@ void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
 
     channels[0] = tmpImage;
     merge(channels, tImage);
-    cvtColor(tImage, cImage, CV_BGR2RGB);
-    QImage image = QImage((const unsigned char*)cImage.data, cImage.rows, cImage.cols, cImage.step, QImage::Format_RGB888);
-    QGraphicsScene* scene = new QGraphicsScene();
-    scene->addPixmap(QPixmap::fromImage(image));
-    ui->graphicsView->setScene(scene);
-//ui->graphicsView->fitInView( scene->sceneRect(), Qt::KeepAspectRatio );
-    imwrite("outExt.png", tImage);
+    tImage.copyTo(origImage(Rec));
+    rectangle(origImage, Rec, Scalar(255), 1, 8, 0);
+    showImage(origImage);
+    imwrite("outExt.png", origImage);
 }
 
 MainWindow::~MainWindow()
