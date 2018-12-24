@@ -25,27 +25,57 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->spinBox->setMaximum(100);
     ui->spinBox->setValue(1);
     QObject::connect(ui->pushButton, SIGNAL(clicked()), this, SLOT(openImage())); //"Обзор..." button
-    QObject::connect(ui->pushButton_2, SIGNAL(clicked()), this, SLOT(process())); //"Обзор..." button
-    QObject::connect(ui->comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(printCom())); //"Обзор..." button
+    QObject::connect(ui->pushButton_3, SIGNAL(clicked()), this, SLOT(processBatch()));
+    QObject::connect(ui->comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(updateSegSide(int))); //"Обзор..." button
+    QObject::connect(ui->spinBox, SIGNAL(valueChanged(int)), this, SLOT(updateSpinBoxValue(int))); //"Обзор..." button
 }
 
-void MainWindow::printCom() {
-    qDebug() << ui->comboBox->currentIndex();
+void MainWindow::updateSegSide(int newValue) {
+    switch(newValue) {
+    case 0:
+        seg_side = 32;
+        break;
+    case 1:
+        seg_side = 64;
+        break;
+    case 2:
+        seg_side = 128;
+        break;
+    }
 }
 
-void dumpMat(Mat* mat) {
-    qDebug() << mat->type();
-    ofstream myfile("output",ofstream::out);
-    myfile << *mat;
-    myfile.close();
+void MainWindow::updateSpinBoxValue(int newValue) {
+    spinBoxValue = newValue;
+}
+
+void MainWindow::processBatch() {
+    QString inputDir = QFileDialog::getExistingDirectory(this, tr("Select an input folder"),
+                                                    QDir::currentPath(),
+                                                    QFileDialog::ShowDirsOnly);
+    QDir inputDirectory(inputDir);
+    QString outputDir = QFileDialog::getExistingDirectory(this, tr("Select an output folder"),
+                                                    QDir::currentPath(),
+                                                    QFileDialog::ShowDirsOnly);
+    QStringList images = inputDirectory.entryList(QStringList() << "*.jpg" << "*.JPG" << "*.png" << "*.PNG" << "*.pgm" << "*.PGM" << "*.jpeg" << ".JPEG" << "*.bmp" << "*.BMP", QDir::Files);
+    for(int i = 0; i < images.size(); i++) {
+        origImage = imread((inputDir + '/' + images.at(i)).toStdString().c_str());
+        QFileInfo info((inputDir + '/' + images.at(i)).toStdString().c_str());
+        QString strNewName = outputDir + "/" + info.completeBaseName() + ".png";
+        if (ui->radioButton->isChecked()) {
+            KochEmbedder(seg_side, spinBoxValue, strNewName);
+        }
+        else if (ui->radioButton_2->isChecked()) {
+            KochExtractor(seg_side, spinBoxValue, strNewName);
+        }
+    }
 }
 
 //Open image function call
 void MainWindow::openImage()
 {
     //declare FileOpName as the choosen opened file name
-    FileOpName = QFileDialog::getOpenFileName(this,
-                                    tr("Open File"), QDir::currentPath(),tr("Image Files (*.png *.jpg *.jpeg *.bmp)"));
+    QString FileOpName = QFileDialog::getOpenFileName(this,
+                                    tr("Open File"), QDir::currentPath(),tr("Image Files (*.png *.pgm *.jpg *.jpeg *.bmp)"));
 
     //Check if FileOpName exist or not
     //function to load the image whenever fName is not empty
@@ -54,30 +84,15 @@ void MainWindow::openImage()
         origImage = imread(FileOpName.toStdString().c_str());
 
         showImage(origImage);
-    }
-}
-
-void MainWindow::process() {
-    if (ui->radioButton->isChecked()) {
-        if (ui->comboBox->currentIndex() == 0) {
-            KochEmbedder(32, ui->spinBox->value());
+        QFileInfo info(FileOpName);
+        if (ui->radioButton->isChecked()) {
+            QString strNewName = info.path() + "/" + info.completeBaseName() + "_emb.png";
+            qDebug() << strNewName;
+            KochEmbedder(seg_side, spinBoxValue, strNewName);
         }
-        else if (ui->comboBox->currentIndex() == 1) {
-            KochEmbedder(64, ui->spinBox->value());
-        }
-        else if (ui->comboBox->currentIndex() == 2) {
-            KochEmbedder(128, ui->spinBox->value());
-        }
-    }
-    else if (ui->radioButton_2->isChecked()) {
-        if (ui->comboBox->currentIndex() == 0) {
-            KochExtractor(32, ui->spinBox->value());
-        }
-        else if (ui->comboBox->currentIndex() == 1) {
-            KochExtractor(64, ui->spinBox->value());
-        }
-        else if (ui->comboBox->currentIndex() == 2) {
-            KochExtractor(128, ui->spinBox->value());
+        else if (ui->radioButton_2->isChecked()) {
+            QString strNewName = info.path() + "/" + info.completeBaseName() + "_ext.png";
+            KochExtractor(seg_side, spinBoxValue, strNewName);
         }
     }
 }
@@ -92,8 +107,8 @@ void MainWindow::showImage(Mat image) {
     ui->graphicsView->setScene(scene);
 }
 
-bool** MainWindow::calculateHashes(unsigned int seg_side) {
-    int Nc = imagerd.cols*imagerd.rows / (seg_side*seg_side);
+bool** MainWindow::calculateHashes(Mat image, unsigned int seg_side) {
+    int Nc = image.cols * image.rows / (seg_side*seg_side);
 
     bool** calculatedHashes = new bool*[Nc];
     for (int i = 0; i < Nc; i++) {
@@ -101,7 +116,7 @@ bool** MainWindow::calculateHashes(unsigned int seg_side) {
     }
 
     Mat grayImage, fgray;
-    cvtColor(imagerd, grayImage, CV_BGR2GRAY);
+    cvtColor(image, grayImage, CV_BGR2GRAY);
 
     grayImage.convertTo(fgray, CV_64F/*, 1.0/255.0*/); // also scale to [0..1] range (not mandatory)
 
@@ -220,7 +235,7 @@ bool** MainWindow::calculateHashes(unsigned int seg_side) {
 //}
 
 
-void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
+void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P, QString outputPath) {
     int x = seg_side;
     int y = seg_side;
     while (x + seg_side <= origImage.cols && y + seg_side <= origImage.rows) {
@@ -228,9 +243,10 @@ void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
         y += seg_side;
     }
     Rect Rec(0, 0, x, y);
+    qDebug() << "deb0";
     imagerd = origImage(Rec);
-
-    bool** calculatedHashes = calculateHashes(seg_side);
+qDebug() << "deb01";
+    bool** calculatedHashes = calculateHashes(imagerd, seg_side);
     Mat blue;
     vector<Mat> channels(3);
     split(imagerd, channels);
@@ -245,9 +261,9 @@ void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
 
     y = 0;
     int n = 0;
-    x;
     Mat* segments = new Mat[Nc];
     for (int i = 0; i < Nc; i++) {
+        qDebug() << "deb1" << ' ' << i;
         segments[i] = Mat(seg_side, seg_side, CV_64F);
     }
     while (y < fimage.rows) {
@@ -346,6 +362,7 @@ void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
     }
     y = 0;
     n = 0;
+    qDebug() << "deb1";
     Mat out = Mat(imagerd.rows, imagerd.cols,CV_64F);
 
     while (y < imagerd.rows) {
@@ -371,7 +388,7 @@ void MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
     channels[0] = tmpImage;
     merge(channels, tImage);
     tImage.copyTo(origImage(Rec));
-    imwrite("outEmb.png", origImage);
+    imwrite(outputPath.toStdString().c_str(), origImage);
     rectangle(origImage, Rec, Scalar(255), 1, 8, 0);
 
     showImage(origImage);
@@ -387,7 +404,7 @@ int hDist(bool* v1, bool* v2, int length) {
     return distance;
 }
 
-void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
+void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T, QString outputPath) {
     int x = seg_side;
     int y = seg_side;
     while (x + seg_side <= origImage.cols && y + seg_side <= origImage.rows) {
@@ -397,7 +414,7 @@ void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
     Rect Rec(0, 0, x, y);
     imagerd = origImage(Rec);
     qDebug() << imagerd.cols << ' ' << imagerd.rows;
-    bool** calculatedHashes = calculateHashes(seg_side);
+    bool** calculatedHashes = calculateHashes(imagerd, seg_side);
     int Nc = imagerd.cols* imagerd.rows / (seg_side*seg_side);
     bool** extractedHashes = new bool*[Nc];
     for (int i = 0; i < Nc; i++) {
@@ -539,7 +556,7 @@ void MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
     tImage.copyTo(origImage(Rec));
     rectangle(origImage, Rec, Scalar(255), 1, 8, 0);
     showImage(origImage);
-    imwrite("outExt.png", origImage);
+    imwrite(outputPath.toStdString().c_str(), origImage);
 }
 
 MainWindow::~MainWindow()

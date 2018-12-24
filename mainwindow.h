@@ -22,18 +22,21 @@ protected:
 
 private slots:
     void openImage();
-    void process();
-    void printCom();
+    void processBatch();
+    void updateSegSide(int newValue);
+    void updateSpinBoxValue(int newValue);
+
 private:
     Ui::MainWindow *ui;
     Mat   imagerd;
     Mat origImage;
-    QString     FileOpName; //declare FileOpName as IplImage
     bool wmark[64] = {1,0,0,1,1,0,1,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,1,0,1,1,0,1,1,0,1,1,0,1,0,1,1,0,0,1,0,1,1,0,0,1,0};
+    unsigned int seg_side = 32;
+    unsigned int spinBoxValue = 1;
 
-    void KochEmbedder(unsigned int seg_side, unsigned int P);
-    void KochExtractor(unsigned int seg_side, unsigned int T);
-    bool** calculateHashes(unsigned int seg_side);
+    void KochEmbedder(unsigned int seg_side, unsigned int P, QString outputPath);
+    void KochExtractor(unsigned int seg_side, unsigned int T, QString outputPath);
+    bool** calculateHashes(Mat image, unsigned int seg_side);
     void showImage(Mat image);
 
 };
