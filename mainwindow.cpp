@@ -117,7 +117,7 @@ void MainWindow::showImage(Mat image) {
     Mat rgb;
     cvtColor(image, rgb, CV_BGR2RGB);
 
-    QImage qimage = QImage((const unsigned char*)rgb.data, rgb.rows, rgb.cols, rgb.step, QImage::Format_RGB888);
+    QImage qimage = QImage((const unsigned char*)rgb.data, rgb.cols, rgb.rows, rgb.step, QImage::Format_RGB888);
     QGraphicsScene* scene = new QGraphicsScene();
     scene->addPixmap(QPixmap::fromImage(qimage));
     ui->graphicsView->setScene(scene);
