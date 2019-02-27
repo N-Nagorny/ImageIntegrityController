@@ -1,6 +1,8 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "ui_mainwindow.h"
+
 #include <QMainWindow>
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -34,6 +36,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    QGraphicsScene scene;
     Mat   imagerd;
     Mat origImage;
     bool wmark[64] = {1,0,0,1,1,0,1,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,1,0,1,1,0,1,1,0,1,1,0,1,0,1,1,0,0,1,0,1,1,0,0,1,0};
@@ -41,8 +44,8 @@ private:
     unsigned int spinBoxValue = 1;
     ImgFormat imgFormat = ImgFormat::PNG;
 
-    Mat KochEmbedder(unsigned int seg_side, unsigned int P);
-    Mat KochExtractor(unsigned int seg_side, unsigned int T);
+    Mat KochEmbedder(unsigned int seg_side, unsigned int P, bool is_batch_mode);
+    Mat KochExtractor(unsigned int seg_side, unsigned int T, bool is_batch_mode);
     bool** calculateHashes(Mat image, unsigned int seg_side);
     void showImage(Mat image);
     void saveImage(Mat image, QString outputPath, ImgFormat format);

@@ -75,14 +75,15 @@ void MainWindow::processBatch() {
                                                     QFileDialog::ShowDirsOnly);
     QStringList images = inputDirectory.entryList(QStringList() << "*.jpg" << "*.JPG" << "*.png" << "*.PNG" << "*.pgm" << "*.PGM" << "*.jpeg" << ".JPEG" << "*.bmp" << "*.BMP", QDir::Files);
     for(int i = 0; i < images.size(); i++) {
+        qDebug() << images.at(i).toStdString().c_str();
         origImage = imread((inputDir + '/' + images.at(i)).toStdString().c_str());
         QFileInfo info((inputDir + '/' + images.at(i)).toStdString().c_str());
         QString strNewName = outputDir + "/" + info.completeBaseName();
         if (ui->radioButton->isChecked()) {
-            saveImage(KochEmbedder(seg_side, spinBoxValue), strNewName,imgFormat);
+            saveImage(KochEmbedder(seg_side, spinBoxValue, true), strNewName,imgFormat);
         }
         else if (ui->radioButton_2->isChecked()) {
-            saveImage(KochExtractor(seg_side, spinBoxValue), strNewName,imgFormat);
+            saveImage(KochExtractor(seg_side, spinBoxValue, true), strNewName,imgFormat);
         }
     }
 }
@@ -104,11 +105,11 @@ void MainWindow::openImage()
         QFileInfo info(FileOpName);
         if (ui->radioButton->isChecked()) {
             QString strNewName = info.path() + "/" + info.completeBaseName() + "_emb";
-            saveImage(KochEmbedder(seg_side, spinBoxValue), strNewName, imgFormat);
+            saveImage(KochEmbedder(seg_side, spinBoxValue, false), strNewName, imgFormat);
         }
         else if (ui->radioButton_2->isChecked()) {
             QString strNewName = info.path() + "/" + info.completeBaseName() + "_ext";
-            saveImage(KochExtractor(seg_side, spinBoxValue),strNewName, imgFormat);
+            saveImage(KochExtractor(seg_side, spinBoxValue, false),strNewName, imgFormat);
         }
     }
 }
@@ -118,9 +119,8 @@ void MainWindow::showImage(Mat image) {
     cvtColor(image, rgb, CV_BGR2RGB);
 
     QImage qimage = QImage((const unsigned char*)rgb.data, rgb.cols, rgb.rows, rgb.step, QImage::Format_RGB888);
-    QGraphicsScene* scene = new QGraphicsScene();
-    scene->addPixmap(QPixmap::fromImage(qimage));
-    ui->graphicsView->setScene(scene);
+    scene.addPixmap(QPixmap::fromImage(qimage));
+    ui->graphicsView->setScene(&scene);
 }
 
 void MainWindow::saveImage(Mat image, QString outputPath, ImgFormat format) {
@@ -196,7 +196,7 @@ bool** MainWindow::calculateHashes(Mat image, unsigned int seg_side) {
             }
         }
     }
-
+    delete [] segments;
     return calculatedHashes;
 }
 
@@ -269,7 +269,7 @@ bool** MainWindow::calculateHashes(Mat image, unsigned int seg_side) {
 //}
 
 
-Mat MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
+Mat MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P, bool is_batch_mode) {
     int x = seg_side;
     int y = seg_side;
     while (x + seg_side <= origImage.cols && y + seg_side <= origImage.rows) {
@@ -277,9 +277,8 @@ Mat MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P) {
         y += seg_side;
     }
     Rect Rec(0, 0, x, y);
-    qDebug() << "deb0";
     imagerd = origImage(Rec);
-qDebug() << "deb01";
+
     bool** calculatedHashes = calculateHashes(imagerd, seg_side);
     Mat blue;
     vector<Mat> channels(3);
@@ -297,7 +296,6 @@ qDebug() << "deb01";
     int n = 0;
     Mat* segments = new Mat[Nc];
     for (int i = 0; i < Nc; i++) {
-        qDebug() << "deb1" << ' ' << i;
         segments[i] = Mat(seg_side, seg_side, CV_64F);
     }
     while (y < fimage.rows) {
@@ -313,7 +311,6 @@ qDebug() << "deb01";
         }
         y = y + seg_side;
     }
-
 
     for (int c = 0; c < Nc; c++) {
         Mat dctMat;
@@ -356,33 +353,33 @@ qDebug() << "deb01";
             if (calculatedHashes[c][i] == true) {
                 int n = 0;
                 while(abs(dctMat.at<double>(v1,u1))-abs(dctMat.at<double>(v2,u2)) + P >= 0) {
-                    if ((dctMat.at<double>(v1,u1) >0 && dctMat.at<double>(v2,u2) > 0) || (dctMat.at<double>(v1,u1)<0 &&dctMat.at<double>(v2,u2)<0)) {
-                        dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) - 1.0;
-                        dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2)+ 1.0;
+                    if ((dctMat.at<double>(v1,u1) >= 0 && dctMat.at<double>(v2,u2) >= 0) ||
+                        (dctMat.at<double>(v1,u1) <= 0 && dctMat.at<double>(v2,u2) <= 0)) {
+                            dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) - 1.0;
+                            dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2)+ 1.0;
                     }
-                    else if (dctMat.at<double>(v1,u1) <= 0) {
+                    else if (dctMat.at<double>(v1,u1) < 0) {
                         dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) +1.0;
                         dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2)+1.0;
                     }
-                    else if (dctMat.at<double>(v2,u2) <= 0) {
+                    else if (dctMat.at<double>(v2,u2) < 0) {
                         dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) -1.0;
                         dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2)- 1.0;
                     }
                 }
             }
             else {
-                //qDebug() << "flase";
                 while(abs(dctMat.at<double>(v1,u1)) - abs(dctMat.at<double>(v2,u2)) <= P) {
-                    if ((dctMat.at<double>(v1,u1) > 0 && dctMat.at<double>(v2,u2) > 0) ||
-                            (dctMat.at<double>(v1,u1) <0 && dctMat.at<double>(v2,u2) < 0)) {
-                        dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) + 1.0;
-                        dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2) - 1.0;
+                    if ((dctMat.at<double>(v1,u1) >= 0 && dctMat.at<double>(v2,u2) >= 0) ||
+                        (dctMat.at<double>(v1,u1) <= 0 && dctMat.at<double>(v2,u2) <= 0)) {
+                            dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) + 1.0;
+                            dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2) - 1.0;
                     }
-                    else if (dctMat.at<double>(v1,u1) <= 0) {
+                    else if (dctMat.at<double>(v1,u1) < 0) {
                         dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) -1.0;
                         dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2) -1.0;
                     }
-                    else if (dctMat.at<double>(v2,u2) <= 0) {
+                    else if (dctMat.at<double>(v2,u2) < 0) {
                         dctMat.at<double>(v1,u1) = dctMat.at<double>(v1,u1) +1.0;
                         dctMat.at<double>(v2,u2) = dctMat.at<double>(v2,u2)+1.0;
                     }
@@ -422,10 +419,19 @@ qDebug() << "deb01";
     channels[0] = tmpImage;
     merge(channels, tImage);
     tImage.copyTo(origImage(Rec));
-    Mat rectangled = origImage.clone();
-    rectangle(rectangled , Rec, Scalar(255), 1, 8, 0);
-
-    showImage(rectangled);
+    if (!is_batch_mode) {
+        Mat rectangled = origImage.clone();
+        rectangle(rectangled , Rec, Scalar(255), 1, 8, 0);
+        showImage(rectangled);
+    }
+    for(int i = 0; i < Nc; i++) {
+        delete [] calculatedHashes[i];
+    }
+    delete [] calculatedHashes;
+    for(int i = 0; i < Nc; i++) {
+        segments[i].release();
+    }
+    delete [] segments;
     return origImage;
 }
 
@@ -438,7 +444,7 @@ int hDist(bool* v1, bool* v2, int length) {
     return distance;
 }
 
-Mat MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
+Mat MainWindow::KochExtractor(unsigned int seg_side, unsigned int T, bool is_batch_mode) {
     int x = seg_side;
     int y = seg_side;
     while (x + seg_side <= origImage.cols && y + seg_side <= origImage.rows) {
@@ -589,7 +595,8 @@ Mat MainWindow::KochExtractor(unsigned int seg_side, unsigned int T) {
     merge(channels, tImage);
     tImage.copyTo(origImage(Rec));
     rectangle(origImage, Rec, Scalar(255), 1, 8, 0);
-    showImage(origImage);
+    if (!is_batch_mode)
+        showImage(origImage);
     return origImage;
 }
 
