@@ -31,7 +31,6 @@ private slots:
     void openImage();
     void processBatch();
     void updateSegSide(int newValue);
-    void updateImgFormat(int newValue);
     void updateSpinBoxValue(int newValue);
 
 private:
@@ -42,13 +41,12 @@ private:
     bool wmark[64] = {1,0,0,1,1,0,1,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,1,0,1,1,0,1,1,0,1,1,0,1,0,1,1,0,0,1,0,1,1,0,0,1,0};
     unsigned int seg_side = 32;
     unsigned int spinBoxValue = 1;
-    ImgFormat imgFormat = ImgFormat::PNG;
 
     Mat KochEmbedder(unsigned int seg_side, unsigned int P, bool is_batch_mode);
     Mat KochExtractor(unsigned int seg_side, unsigned int T, bool is_batch_mode);
     bool** calculateHashes(Mat image, unsigned int seg_side);
     void showImage(Mat image);
-    void saveImage(Mat image, QString outputPath, ImgFormat format);
+    void saveImage(Mat image, QString outputPath);
 };
 
 #endif // MAINWINDOW_H

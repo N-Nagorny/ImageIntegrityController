@@ -20,18 +20,13 @@ MainWindow::MainWindow(QWidget *parent) :
     segSizes.append(QString("32×32"));
     segSizes.append(QString("64×64"));
     segSizes.append(QString("128×128"));
-    QList<QString> imgFormats;
-    imgFormats.append(QString("PNG"));
-    imgFormats.append(QString("PGM"));
     ui->comboBox->addItems(segSizes);
-    ui->comboBox_2->addItems(imgFormats);
     ui->spinBox->setMinimum(1);
     ui->spinBox->setMaximum(100);
     ui->spinBox->setValue(1);
     QObject::connect(ui->pushButton, SIGNAL(clicked()), this, SLOT(openImage())); //"Обзор..." button
     QObject::connect(ui->pushButton_3, SIGNAL(clicked()), this, SLOT(processBatch()));
     QObject::connect(ui->comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(updateSegSide(int))); //"Обзор..." button
-    QObject::connect(ui->comboBox_2, SIGNAL(currentIndexChanged(int)), this, SLOT(updateImgFormat(int)));
     QObject::connect(ui->spinBox, SIGNAL(valueChanged(int)), this, SLOT(updateSpinBoxValue(int))); //"Обзор..." button
 }
 
@@ -47,18 +42,6 @@ void MainWindow::updateSegSide(int newValue) {
         seg_side = 128;
         break;
     }
-}
-
-void MainWindow::updateImgFormat(int newValue) {
-    switch(newValue) {
-    case 0:
-        imgFormat = ImgFormat::PNG;
-        break;
-    case 1:
-        imgFormat = ImgFormat::PGM;
-        break;
-    }
-    qDebug() << static_cast<std::underlying_type<ImgFormat>::type>(imgFormat);
 }
 
 void MainWindow::updateSpinBoxValue(int newValue) {
@@ -80,10 +63,10 @@ void MainWindow::processBatch() {
         QFileInfo info((inputDir + '/' + images.at(i)).toStdString().c_str());
         QString strNewName = outputDir + "/" + info.completeBaseName();
         if (ui->radioButton->isChecked()) {
-            saveImage(KochEmbedder(seg_side, spinBoxValue, true), strNewName,imgFormat);
+            saveImage(KochEmbedder(seg_side, spinBoxValue, true), strNewName);
         }
         else if (ui->radioButton_2->isChecked()) {
-            saveImage(KochExtractor(seg_side, spinBoxValue, true), strNewName,imgFormat);
+            saveImage(KochExtractor(seg_side, spinBoxValue, true), strNewName);
         }
     }
 }
@@ -99,46 +82,38 @@ void MainWindow::openImage()
     //function to load the image whenever fName is not empty
     if( FileOpName.size() )
     {
-        origImage = imread(FileOpName.toStdString().c_str());
+        origImage = imread(FileOpName.toStdString().c_str(), cv::IMREAD_UNCHANGED);
 
         showImage(origImage);
         QFileInfo info(FileOpName);
         if (ui->radioButton->isChecked()) {
             QString strNewName = info.path() + "/" + info.completeBaseName() + "_emb";
-            saveImage(KochEmbedder(seg_side, spinBoxValue, false), strNewName, imgFormat);
+            saveImage(KochEmbedder(seg_side, spinBoxValue, false), strNewName);
         }
         else if (ui->radioButton_2->isChecked()) {
             QString strNewName = info.path() + "/" + info.completeBaseName() + "_ext";
-            saveImage(KochExtractor(seg_side, spinBoxValue, false),strNewName, imgFormat);
+            saveImage(KochExtractor(seg_side, spinBoxValue, false),strNewName);
         }
     }
 }
 
 void MainWindow::showImage(Mat image) {
-    Mat rgb;
-    cvtColor(image, rgb, CV_BGR2RGB);
-
-    QImage qimage = QImage((const unsigned char*)rgb.data, rgb.cols, rgb.rows, rgb.step, QImage::Format_RGB888);
-    scene.addPixmap(QPixmap::fromImage(qimage));
+    if (image.channels() == 3) {
+        Mat rgb;
+        cvtColor(image, rgb, CV_BGR2RGB);
+        QImage qimage = QImage((const unsigned char*)rgb.data, rgb.cols, rgb.rows, rgb.step, QImage::Format_RGB888);
+        scene.addPixmap(QPixmap::fromImage(qimage));
+    }
+    else if (image.channels() == 1) {
+        QImage qimage = QImage((const unsigned char*)image.data, image.cols, image.rows, image.step, QImage::Format_Grayscale8);
+        scene.addPixmap(QPixmap::fromImage(qimage));
+    }
     ui->graphicsView->setScene(&scene);
 }
 
-void MainWindow::saveImage(Mat image, QString outputPath, ImgFormat format) {
-    QString finalPath;
-    Mat finalMat;
-    switch(format) {
-    case ImgFormat::PNG:
-        finalPath = outputPath + ".png";
-        finalMat = image;
-        break;
-    case ImgFormat::PGM:
-        finalPath = outputPath + ".pgm";
-        Mat grayImage;
-        cvtColor(image, grayImage, CV_BGR2GRAY);
-        finalMat = grayImage;
-        break;
-    }
-    imwrite(finalPath.toStdString().c_str(), finalMat);
+void MainWindow::saveImage(Mat image, QString outputPath) {
+    QString finalPath = outputPath + ".png";
+    imwrite(finalPath.toStdString().c_str(), image);
 }
 
 bool** MainWindow::calculateHashes(Mat image, unsigned int seg_side) {
@@ -149,10 +124,11 @@ bool** MainWindow::calculateHashes(Mat image, unsigned int seg_side) {
         calculatedHashes[i] = new bool[64];
     }
 
-    Mat grayImage, fgray;
-    cvtColor(image, grayImage, CV_BGR2GRAY);
+    Mat fgray;
+    if (image.channels() == 3)
+        cvtColor(image, image, CV_BGR2GRAY);
 
-    grayImage.convertTo(fgray, CV_64F/*, 1.0/255.0*/); // also scale to [0..1] range (not mandatory)
+    image.convertTo(fgray, CV_64F/*, 1.0/255.0*/); // also scale to [0..1] range (not mandatory)
 
     int y = 0;
     int n = 0;
@@ -280,14 +256,16 @@ Mat MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P, bool is_batc
     imagerd = origImage(Rec);
 
     bool** calculatedHashes = calculateHashes(imagerd, seg_side);
-    Mat blue;
-    vector<Mat> channels(3);
-    split(imagerd, channels);
-    blue = channels[0];
+
 
     Mat fimage;
-
-    blue.convertTo(fimage, CV_64F/*, 1.0/255.0*/); // also scale to [0..1] range (not mandatory)
+    if (imagerd.channels() == 3) {
+        vector<Mat> channels(3);
+        split(imagerd, channels);
+        channels[0].convertTo(fimage, CV_64F);
+    }
+    else
+        imagerd.convertTo(fimage, CV_64F/*, 1.0/255.0*/); // also scale to [0..1] range (not mandatory)
 
 
     int Nc = fimage.cols*fimage.rows / (seg_side*seg_side);
@@ -413,12 +391,17 @@ Mat MainWindow::KochEmbedder(unsigned int seg_side, unsigned int P, bool is_batc
 
 //    Mat idctMat;
 //    dct(out,idctMat, DCT_INVERSE);
-    Mat tmpImage, cImage, tImage;
+    Mat tmpImage;
+    if (imagerd.channels() == 3) {
+        vector<Mat> channels(3);
+        split(imagerd, channels);
+        out.convertTo(channels[0], CV_8U/*, 255.0*/); // also scale to [0..1] range (not mandatory)
+        merge(channels, tmpImage);
+    }
+    else
+        out.convertTo(tmpImage, CV_8U/*, 255.0*/); // also scale to [0..1] range (not mandatory)
 
-    out.convertTo(tmpImage, CV_8U/*, 255.0*/); // also scale to [0..1] range (not mandatory)
-    channels[0] = tmpImage;
-    merge(channels, tImage);
-    tImage.copyTo(origImage(Rec));
+    tmpImage.copyTo(origImage(Rec));
     if (!is_batch_mode) {
         Mat rectangled = origImage.clone();
         rectangle(rectangled , Rec, Scalar(255), 1, 8, 0);
@@ -460,14 +443,14 @@ Mat MainWindow::KochExtractor(unsigned int seg_side, unsigned int T, bool is_bat
     for (int i = 0; i < Nc; i++) {
         extractedHashes[i] = new bool[64];
     }
-    Mat blue;
-    vector<Mat> channels(3);
-    split(imagerd, channels);
-    blue = channels[0];
-
     Mat fimage;
-
-    blue.convertTo(fimage, CV_64F/*, 1.0/255.0*/); // also scale to [0..1] range (not mandatory)
+    if (imagerd.channels() == 3) {
+        vector<Mat> channels(3);
+        split(imagerd, channels);
+        channels[0].convertTo(fimage, CV_64F);
+    }
+    else
+        imagerd.convertTo(fimage, CV_64F/*, 1.0/255.0*/); // also scale to [0..1] range (not mandatory)
 
 //    Mat dctMat;
 //    dct(fimage,dctMat);
@@ -570,7 +553,6 @@ Mat MainWindow::KochExtractor(unsigned int seg_side, unsigned int T, bool is_bat
 
 //    Mat idctMat;
 //    dct(out,idctMat, DCT_INVERSE);
-    Mat tmpImage, cImage, tImage;
 
     y = 0;
     n = 0;
@@ -589,11 +571,16 @@ Mat MainWindow::KochExtractor(unsigned int seg_side, unsigned int T, bool is_bat
         }
         y = y + seg_side;
     }
-    out.convertTo(tmpImage, CV_8U);
-
-    channels[0] = tmpImage;
-    merge(channels, tImage);
-    tImage.copyTo(origImage(Rec));
+    Mat tmpImage;
+    if (imagerd.channels() == 3) {
+        vector<Mat> channels(3);
+        split(imagerd, channels);
+        out.convertTo(channels[0], CV_8U/*, 255.0*/); // also scale to [0..1] range (not mandatory)
+        merge(channels, tmpImage);
+    }
+    else
+        out.convertTo(tmpImage, CV_8U/*, 255.0*/); // also scale to [0..1] range (not mandatory)
+    tmpImage.copyTo(origImage(Rec));
     rectangle(origImage, Rec, Scalar(255), 1, 8, 0);
     if (!is_batch_mode)
         showImage(origImage);
