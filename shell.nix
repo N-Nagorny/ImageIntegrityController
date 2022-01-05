@@ -6,7 +6,7 @@ with libsForQt512;
 stdenv.mkDerivation {
   name = "ImageIntegrityController";
   buildInputs = [ opencv3 qtbase ];
-  nativeBuildInputs = [ cmake gnumake pkg-config valgrind wrapQtAppsHook ];
+  nativeBuildInputs = [ cmake gnumake pkg-config qtcreator valgrind wrapQtAppsHook ];
   src = ./.;
   shellHook = ''
     setQtEnvironment=$(mktemp)

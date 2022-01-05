@@ -1,52 +1,43 @@
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#pragma once
 
 #include "ui_mainwindow.h"
 
+#include <memory>
+
+#include <QGraphicsScene>
 #include <QMainWindow>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-using namespace cv;
-using namespace std;
+
 namespace Ui {
-class MainWindow;
+  class MainWindow;
 }
 
-enum class ImgFormat {
-    PNG,
-    PGM
-};
-
-class MainWindow : public QMainWindow
-{
-    Q_OBJECT
+class MainWindow : public QMainWindow {
+  Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
-protected:
+  explicit MainWindow(QWidget* parent = nullptr);
+  virtual ~MainWindow() {};
 
 private slots:
-    void openImage();
-    void processBatch();
-    void updateSegSide(int newValue);
-    void updateSpinBoxValue(int newValue);
+  unsigned int getSpinBoxValue();
+  QString getOutputFolderPath();
+  QString getInputFilePath();
+  void setOutputFolderPath();
+  void setInputFilePath();
+  void setSigningMode();
+  void setVerifyingMode();
+  void performAction();
 
 private:
-    Ui::MainWindow *ui;
-    QGraphicsScene scene;
-    Mat   imagerd;
-    Mat origImage;
-    bool wmark[64] = {1,0,0,1,1,0,1,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,1,0,1,1,0,1,1,0,1,1,0,1,0,1,1,0,0,1,0,1,1,0,0,1,0};
-    unsigned int seg_side = 32;
-    unsigned int spinBoxValue = 1;
+  void showMessage(const QString& text);
+  void signImage(const QString& input_file_path, const QString& output_folder_path, unsigned int block_side, unsigned int p);
+  void verifyImage(const QString& input_file_path, const QString& output_folder_path, unsigned int block_side, unsigned int critical_distance);
 
-    Mat KochEmbedder(unsigned int seg_side, unsigned int P, bool is_batch_mode);
-    Mat KochExtractor(unsigned int seg_side, unsigned int T, bool is_batch_mode);
-    bool** calculateHashes(Mat image, unsigned int seg_side);
-    void showImage(Mat image);
-    void saveImage(Mat image, QString outputPath);
+  std::unique_ptr<Ui::MainWindow> ui;
+  QGraphicsScene scene;
+  std::map<int, unsigned int> block_sides;
 };
-
-#endif // MAINWINDOW_H
